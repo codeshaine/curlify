@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"fmt"
+	"math"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -12,15 +13,15 @@ import (
 )
 
 var (
-	focusedStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			Padding(1, 2).
-			Foreground(lipgloss.Color("205")).
-			BorderForeground(lipgloss.Color("63")).Width(100).Height(15)
-	normalStyle = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder()).
-			Padding(1, 2).
-			Foreground(lipgloss.Color("120")).Width(100).Height(13)
+	// focusedStyle = lipgloss.NewStyle().
+	// 		Border(lipgloss.RoundedBorder()).
+	// 		Padding(1, 2).
+	// 		Foreground(lipgloss.Color("205")).
+	// 		BorderForeground(lipgloss.Color("63")).Width(100).Height(15)
+	// normalStyle = lipgloss.NewStyle().
+	// 		Border(lipgloss.NormalBorder()).
+	// 		Padding(1, 2).
+	// 		Foreground(lipgloss.Color("120")).Width(100).Height(13)
 	spacer = 1
 )
 
@@ -28,6 +29,8 @@ type Model struct {
 	Focus       int
 	InputBuffer string
 	Output      string
+	width       int
+	height      int
 }
 
 func NewModel() Model {
@@ -35,12 +38,15 @@ func NewModel() Model {
 		Focus:       0,
 		InputBuffer: "",
 		Output:      "",
+		width:       0,
+		height:      0,
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	return nil
+	return tea.WindowSize()
 }
+
 func formatJSONResponse(rawJSON string) string {
 	var jsonResponse map[string]interface{}
 
@@ -58,9 +64,11 @@ func formatJSONResponse(rawJSON string) string {
 	// Return the formatted JSON string
 	return string(prettyJSON)
 }
+
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+
 		switch msg.String() {
 		case "up":
 			if m.Focus > 0 {
@@ -95,15 +103,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.Focus == 0 && len(m.InputBuffer) > 0 {
 				m.InputBuffer = m.InputBuffer[:len(m.InputBuffer)-1]
 			}
+
 		case "ctrl+d":
 			if m.Focus == 0 {
 				m.InputBuffer += "https://dummyjson.com/recipes/1"
 			}
+
 		default:
 			if m.Focus == 0 {
+				// if !strings.Contains(msg.String(), "ctrl") {
 				m.InputBuffer += msg.String()
+				/* } */
+
 			}
 		}
+	case tea.WindowSizeMsg:
+		m.width = msg.Width
+		m.height = msg.Height
 	}
 	return m, nil
 }
@@ -111,14 +127,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) View() string {
 	topContent := "Input: " + m.InputBuffer + "\n\nUse 'up'/'down' to switch focus."
 	bottomContent := "Output: " + m.Output + "\n\nPress 'q' to quit."
+	topPane := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		Padding(1, 2).
+		Foreground(lipgloss.Color("104")).
+		Width(int(math.Floor(0.80 * float64(m.width)))).
+		Height(int(math.Floor(0.35 * float64(m.height)))).Render(topContent)
 
-	topPane := normalStyle.Render(topContent)
-	bottomPane := normalStyle.Render(bottomContent)
+	bottomPane := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		Padding(1, 2).
+		Foreground(lipgloss.Color("104")).
+		BorderForeground(lipgloss.Color("63")).Width(int(math.Floor(0.80 * float64(m.width)))).Height(int(math.Floor(0.35 * float64(m.height)))).Render(bottomContent)
 
 	if m.Focus == 0 {
-		topPane = focusedStyle.Render(topContent)
+		topPane = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			Padding(1, 2).
+			Foreground(lipgloss.Color("205")).
+			Width(int(math.Floor(0.80 * float64(m.width)))).
+			Height(int(math.Floor(0.35 * float64(m.height)))).Render(topContent)
+
 	} else {
-		bottomPane = focusedStyle.Render(bottomContent)
+		bottomPane = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			Padding(1, 2).
+			Foreground(lipgloss.Color("205")).
+			BorderForeground(lipgloss.Color("63")).Width(int(math.Floor(0.80 * float64(m.width)))).Height(int(math.Floor(0.35 * float64(m.height)))).Render(bottomContent)
+
 	}
 
 	return lipgloss.JoinVertical(
