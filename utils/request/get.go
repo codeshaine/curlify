@@ -1,6 +1,7 @@
 package request
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 )
@@ -14,7 +15,7 @@ type Get struct {
 func (g *Get) Do() (*http.Response, error) {
 	parsedUrl, err := url.Parse(g.Url)
 	if err != nil {
-		panic(err)
+		return nil, errors.New("invalid URL")
 	}
 
 	req := http.Request{
