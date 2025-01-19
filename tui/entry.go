@@ -2,165 +2,264 @@ package tui
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"math"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textinput"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/codeshaine/curlify/pkg/request"
+	"github.com/codeshaine/curlify/utils/request"
+	"github.com/codeshaine/curlify/utils/response"
 )
 
-var (
-	// focusedStyle = lipgloss.NewStyle().
-	// 		Border(lipgloss.RoundedBorder()).
-	// 		Padding(1, 2).
-	// 		Foreground(lipgloss.Color("205")).
-	// 		BorderForeground(lipgloss.Color("63")).Width(100).Height(15)
-	// normalStyle = lipgloss.NewStyle().
-	// 		Border(lipgloss.NormalBorder()).
-	// 		Padding(1, 2).
-	// 		Foreground(lipgloss.Color("120")).Width(100).Height(13)
-	spacer = 1
+const (
+	// Existing constants
+	spacer      = 1
+	wSize       = 0.98
+	botPanHSize = 0.50
+	topPanHSize = 0.40
+
+	// Mode constants
+	NormalMode = "NORMAL"
+	EditMode   = "EDIT"
 )
+
+type Mode string
+
+type Dim struct {
+	width  int
+	height int
+}
 
 type Model struct {
-	Focus       int
-	InputBuffer string
-	Output      string
-	width       int
-	height      int
+	Focus     int
+	message   string
+	Input     string
+	TextInput textinput.Model
+	Output    string
+	Result    viewport.Model
+	Ready     bool
+	Dimension Dim
+	Mode      Mode
 }
 
 func NewModel() Model {
+	ti := textinput.New()
+	ti.Placeholder = "Enter URL..."
+	ti.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	ti.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+
+	vp := viewport.New(0, 0)
+	vp.SetContent("")
 	return Model{
-		Focus:       0,
-		InputBuffer: "",
-		Output:      "",
-		width:       0,
-		height:      0,
+		Focus:     0,
+		message:   "",
+		Input:     "",
+		Output:    "",
+		Ready:     false,
+		TextInput: ti,
+		Result:    vp,         //view port
+		Mode:      NormalMode, // Start in normal mode
+		Dimension: Dim{
+			height: 0,
+			width:  0,
+		},
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.WindowSize()
-}
-
-func formatJSONResponse(rawJSON string) string {
-	var jsonResponse map[string]interface{}
-
-	// Unmarshal the raw JSON string into a Go map
-	if err := json.Unmarshal([]byte(rawJSON), &jsonResponse); err != nil {
-		return fmt.Sprintf("Error decoding JSON: %v", err)
-	}
-
-	// Marshal the JSON with indentation
-	prettyJSON, err := json.MarshalIndent(jsonResponse, "\t", "\t") // Using tabs for indentation
-	if err != nil {
-		return fmt.Sprintf("Error formatting JSON: %v", err)
-	}
-
-	// Return the formatted JSON string
-	return string(prettyJSON)
+	return tea.Batch(
+		tea.WindowSize(),
+		textinput.Blink,
+	)
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	var (
+		cmd  tea.Cmd
+		cmds []tea.Cmd
+	)
+
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-
+		// Handle mode switching and global commands
 		switch msg.String() {
-		case "up":
-			if m.Focus > 0 {
-				m.Focus--
+		case "esc":
+			if m.Mode == EditMode {
+				m.Mode = NormalMode
+				m.TextInput.Blur()
+				return m, nil
 			}
-		case "down":
-			if m.Focus < 1 {
-				m.Focus++
-			}
-		case "q":
-			return m, tea.Quit
-		case "enter":
-			if m.Focus == 0 {
-				header := make(map[string][]string)
-				header["Content-Type"] = []string{"application/json"}
-
-				getReq := request.NewGet(m.InputBuffer, header)
-				res, err := getReq.Do()
-				if err != nil {
-					panic(err)
+		case "i":
+			if m.Mode == NormalMode {
+				m.Mode = EditMode
+				if m.Focus == 0 {
+					m.TextInput.Focus()
 				}
-				defer res.Body.Close()
+				return m, nil
+			}
+		}
 
-				data := bufio.NewScanner(res.Body)
-				for data.Scan() {
-					m.Output += data.Text() + "\n"
+		// Handle mode-specific commands
+		if m.Mode == NormalMode {
+			switch msg.String() {
+			case "j": // Move focus down
+				if m.Focus < 1 {
+					m.Focus++
+					m.TextInput.Blur()
 				}
-				// m.Output = formatJSONResponse(m.Output)
-				m.InputBuffer = ""
-			}
-		case "backspace":
-			if m.Focus == 0 && len(m.InputBuffer) > 0 {
-				m.InputBuffer = m.InputBuffer[:len(m.InputBuffer)-1]
-			}
+			case "k": // Move focus up
+				if m.Focus > 0 {
+					m.Focus--
+					if m.Mode == EditMode {
+						m.TextInput.Focus()
+					}
+				}
+			case "q":
+				return m, tea.Quit
 
-		case "ctrl+d":
-			if m.Focus == 0 {
-				m.InputBuffer += "https://dummyjson.com/recipes/1"
+				// case "pagedown": // Page down
+				// 	if m.Focus == 1 {
+				// 		m.Result.ViewDown()
+				// 	}
+				// case "pageup": // Page up
+				// 	if m.Focus == 1 {
+				// 	}
 			}
-
-		default:
+		} else { // Edit mode
 			if m.Focus == 0 {
-				// if !strings.Contains(msg.String(), "ctrl") {
-				m.InputBuffer += msg.String()
-				/* } */
+				// Handle input field editing
+				switch msg.String() {
+				case "enter":
+					header := make(map[string][]string)
+					header["Content-Type"] = []string{"application/json"}
+					req := request.NewGet(m.TextInput.Value(), header)
+
+					res, err := req.Do()
+					if err != nil {
+						m.Output = "Invalid URL"
+						m.Result.SetContent(m.Output)
+						break
+					}
+
+					defer res.Body.Close()
+					var output strings.Builder
+					data := bufio.NewScanner(res.Body)
+					for data.Scan() {
+						output.WriteString(data.Text() + "\n")
+					}
+					m.Output = response.FormatJSONResponse(output.String())
+					m.Result.SetContent(m.Output)
+					m.Result.GotoTop()
+
+				default:
+					m.TextInput, cmd = m.TextInput.Update(msg)
+					cmds = append(cmds, cmd)
+				}
+			} else if m.Focus == 1 {
+				m.Result, cmd = m.Result.Update(msg)
+				cmds = append(cmds, cmd)
 
 			}
 		}
+
 	case tea.WindowSizeMsg:
-		m.width = msg.Width
-		m.height = msg.Height
+		m.Dimension.width = msg.Width
+		m.Dimension.height = msg.Height
+		headerHeight := int(math.Floor(topPanHSize * float64(m.Dimension.height)))
+		viewportHeight := m.Dimension.height - headerHeight - spacer - 10
+
+		if !m.Ready {
+			m.Result = viewport.New(
+				int(math.Floor(wSize*float64(m.Dimension.width))),
+				viewportHeight,
+			)
+			m.Ready = true
+		} else {
+			// Subsequent resize
+			m.Result.Width = int(math.Floor(wSize * float64(m.Dimension.width)))
+			m.Result.Height = viewportHeight
+		}
 	}
-	return m, nil
+
+	return m, tea.Batch(cmds...)
 }
 
 func (m Model) View() string {
-	topContent := "Input: " + m.InputBuffer + "\n\nUse 'up'/'down' to switch focus."
-	bottomContent := "Output: " + m.Output + "\n\nPress 'q' to quit."
+	modeColor := map[Mode]string{
+		NormalMode: "212",
+		EditMode:   "114",
+	}
+
+	statusBar := lipgloss.NewStyle().
+		Background(lipgloss.Color(modeColor[m.Mode])).
+		Foreground(lipgloss.Color("0")).
+		Bold(true).
+		Padding(0, 1).
+		Render(fmt.Sprintf(" %s MODE | Focus: %s ",
+			m.Mode,
+			map[int]string{
+				0: "INPUT",
+				1: "RESULT",
+			}[m.Focus]))
+
+	// Input section with hint text
+	inputHint := ""
+	if m.Mode == NormalMode {
+		inputHint = "\n[i: edit mode, j/k: navigation]"
+	} else {
+		inputHint = "\n[esc: normal mode]"
+	}
+
+	topContent := m.TextInput.View() + inputHint
+
+	// Style the panes based on focus and mode
 	topPane := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		Padding(1, 2).
 		Foreground(lipgloss.Color("104")).
-		Width(int(math.Floor(0.80 * float64(m.width)))).
-		Height(int(math.Floor(0.35 * float64(m.height)))).Render(topContent)
-
-	bottomPane := lipgloss.NewStyle().
-		Border(lipgloss.RoundedBorder()).
-		Padding(1, 2).
-		Foreground(lipgloss.Color("104")).
-		BorderForeground(lipgloss.Color("63")).Width(int(math.Floor(0.80 * float64(m.width)))).Height(int(math.Floor(0.35 * float64(m.height)))).Render(bottomContent)
+		Width(int(math.Floor(wSize * float64(m.Dimension.width)))).
+		Height(int(math.Floor(topPanHSize * float64(m.Dimension.height)))).
+		Render(topContent)
 
 	if m.Focus == 0 {
 		topPane = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
+			BorderForeground(lipgloss.Color("205")).
 			Padding(1, 2).
 			Foreground(lipgloss.Color("205")).
-			Width(int(math.Floor(0.80 * float64(m.width)))).
-			Height(int(math.Floor(0.35 * float64(m.height)))).Render(topContent)
-
-	} else {
-		bottomPane = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			Padding(1, 2).
-			Foreground(lipgloss.Color("205")).
-			BorderForeground(lipgloss.Color("63")).Width(int(math.Floor(0.80 * float64(m.width)))).Height(int(math.Floor(0.35 * float64(m.height)))).Render(bottomContent)
-
+			Width(int(math.Floor(wSize * float64(m.Dimension.width)))).
+			Height(int(math.Floor(topPanHSize * float64(m.Dimension.height)))).
+			Render(topContent)
 	}
+
+	viewportStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color("63")).
+		Width(int(math.Floor(wSize * float64(m.Dimension.width))))
+
+	if m.Focus == 1 {
+		viewportStyle = viewportStyle.BorderForeground(lipgloss.Color("205"))
+	}
+
+	scrollHint := ""
+	if m.Focus == 1 {
+		if m.Mode == NormalMode {
+			scrollHint = "\n[h/l: scroll, ctrl+f/ctrl+b: page up/down]"
+		} else {
+			scrollHint = "\n[↑/↓: scroll, PgUp/PgDn: page up/down]"
+		}
+	}
+
+	viewportContent := viewportStyle.Render(m.Result.View() + scrollHint)
 
 	return lipgloss.JoinVertical(
 		lipgloss.Top,
+		statusBar,
 		topPane,
 		strings.Repeat(" ", spacer),
-		bottomPane,
+		viewportContent,
 	)
 }

@@ -9,6 +9,7 @@ import (
 
 func main() {
 	// Initial state of the application
+
 	model := tui.NewModel()
 
 	// Create and start the Bubble Tea program
