@@ -6,6 +6,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -15,18 +16,18 @@ import (
 )
 
 const (
-	// Existing constants
 	spacer      = 1
-	wSize       = 0.98
-	botPanHSize = 0.50
-	topPanHSize = 0.40
-
-	// Mode constants
-	NormalMode = "NORMAL"
-	EditMode   = "EDIT"
+	wSize       = 0.92
+	methodWidth = 0.15
+	urlWidth    = 0.83
 )
 
 type Mode string
+
+const (
+	NormalMode = "NORMAL"
+	EditMode   = "EDIT"
+)
 
 type Dim struct {
 	width  int
@@ -34,46 +35,89 @@ type Dim struct {
 }
 
 type Model struct {
-	Focus     int
-	message   string
-	Input     string
-	TextInput textinput.Model
-	Output    string
-	Result    viewport.Model
-	Ready     bool
-	Dimension Dim
-	Mode      Mode
+	Focus        int
+	message      string
+	Input        string
+	MethodInput  textinput.Model
+	URLInput     textinput.Model
+	HeaderInput  textarea.Model
+	Output       string
+	Result       viewport.Model
+	Ready        bool
+	Dimension    Dim
+	Mode         Mode
+	RequestType  string
+	HeaderValues map[string][]string
 }
 
 func NewModel() Model {
-	ti := textinput.New()
-	ti.Placeholder = "Enter URL..."
-	ti.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	ti.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	mi := textinput.New()
+	mi.Placeholder = "GET"
+	mi.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
+	mi.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
+	mi.Width = 10
+
+	ui := textinput.New()
+	ui.Placeholder = "Enter URL..."
+	ui.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
+	ui.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
+
+	hi := textarea.New()
+	hi.Placeholder = "Enter headers (key: value)..."
+	hi.ShowLineNumbers = false
+	hi.Prompt = ""
+	hi.FocusedStyle.Base = lipgloss.NewStyle().
+		BorderForeground(lipgloss.Color("39")).
+		Border(lipgloss.RoundedBorder())
+	hi.BlurredStyle.Base = lipgloss.NewStyle().
+		BorderForeground(lipgloss.Color("244")).
+		Border(lipgloss.RoundedBorder())
 
 	vp := viewport.New(0, 0)
 	vp.SetContent("")
+
 	return Model{
-		Focus:     0,
-		message:   "",
-		Input:     "",
-		Output:    "",
-		Ready:     false,
-		TextInput: ti,
-		Result:    vp,         //view port
-		Mode:      NormalMode, // Start in normal mode
-		Dimension: Dim{
-			height: 0,
-			width:  0,
-		},
+		Focus:        0,
+		message:      "",
+		Input:        "",
+		Output:       "",
+		Ready:        false,
+		MethodInput:  mi,
+		URLInput:     ui,
+		HeaderInput:  hi,
+		Result:       vp,
+		Mode:         NormalMode,
+		RequestType:  "GET",
+		HeaderValues: make(map[string][]string),
+		Dimension:    Dim{height: 0, width: 0},
 	}
 }
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(
-		tea.WindowSize(),
-		textinput.Blink,
-	)
+	return tea.Batch(tea.EnterAltScreen, textinput.Blink)
+}
+
+func makeRequest(m *Model) error {
+	header := request.ParseHeaders(m.HeaderInput.Value())
+	req := request.NewGet(m.URLInput.Value(), header)
+
+	res, err := req.Do()
+	if err != nil {
+		m.Output = "Invalid URL"
+		m.Result.SetContent(m.Output)
+		return err
+	}
+
+	defer res.Body.Close()
+	var output strings.Builder
+	data := bufio.NewScanner(res.Body)
+	for data.Scan() {
+		output.WriteString(data.Text() + "\n")
+	}
+	m.Output = response.FormatJSONResponse(output.String())
+	m.Result.SetContent(m.Output)
+	m.Result.GotoTop()
+	return nil
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -84,103 +128,104 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		// Handle mode switching and global commands
 		switch msg.String() {
 		case "esc":
 			if m.Mode == EditMode {
 				m.Mode = NormalMode
-				m.TextInput.Blur()
+				m.MethodInput.Blur()
+				m.URLInput.Blur()
+				m.HeaderInput.Blur()
 				return m, nil
 			}
 		case "i":
 			if m.Mode == NormalMode {
 				m.Mode = EditMode
-				if m.Focus == 0 {
-					m.TextInput.Focus()
+				switch m.Focus {
+				case 0:
+					m.MethodInput.Focus()
+				case 1:
+					m.URLInput.Focus()
+				case 2:
+					m.HeaderInput.Focus()
 				}
 				return m, nil
 			}
 		}
 
-		// Handle mode-specific commands
 		if m.Mode == NormalMode {
 			switch msg.String() {
-			case "j": // Move focus down
-				if m.Focus < 1 {
+			case "j":
+				if m.Focus < 3 {
 					m.Focus++
-					m.TextInput.Blur()
+					m.MethodInput.Blur()
+					m.URLInput.Blur()
+					m.HeaderInput.Blur()
 				}
-			case "k": // Move focus up
+			case "k":
 				if m.Focus > 0 {
 					m.Focus--
 					if m.Mode == EditMode {
-						m.TextInput.Focus()
+						switch m.Focus {
+						case 0:
+							m.MethodInput.Focus()
+						case 1:
+							m.URLInput.Focus()
+						case 2:
+							m.HeaderInput.Focus()
+						}
 					}
 				}
 			case "q":
 				return m, tea.Quit
-
-				// case "pagedown": // Page down
-				// 	if m.Focus == 1 {
-				// 		m.Result.ViewDown()
-				// 	}
-				// case "pageup": // Page up
-				// 	if m.Focus == 1 {
-				// 	}
 			}
-		} else { // Edit mode
-			if m.Focus == 0 {
-				// Handle input field editing
+		} else {
+			if m.Focus != 3 {
 				switch msg.String() {
 				case "enter":
-					header := make(map[string][]string)
-					header["Content-Type"] = []string{"application/json"}
-					req := request.NewGet(m.TextInput.Value(), header)
-
-					res, err := req.Do()
-					if err != nil {
-						m.Output = "Invalid URL"
-						m.Result.SetContent(m.Output)
-						break
+					if m.Focus != 2 && m.URLInput.Value() != "" {
+						makeRequest(&m)
 					}
-
-					defer res.Body.Close()
-					var output strings.Builder
-					data := bufio.NewScanner(res.Body)
-					for data.Scan() {
-						output.WriteString(data.Text() + "\n")
-					}
-					m.Output = response.FormatJSONResponse(output.String())
-					m.Result.SetContent(m.Output)
-					m.Result.GotoTop()
-
 				default:
-					m.TextInput, cmd = m.TextInput.Update(msg)
+					switch m.Focus {
+					case 0:
+						m.MethodInput, cmd = m.MethodInput.Update(msg)
+					case 1:
+						m.URLInput, cmd = m.URLInput.Update(msg)
+					case 2:
+						var textAreaCmd tea.Cmd
+						m.HeaderInput, textAreaCmd = m.HeaderInput.Update(msg)
+						cmds = append(cmds, textAreaCmd)
+					}
 					cmds = append(cmds, cmd)
 				}
-			} else if m.Focus == 1 {
+			} else {
 				m.Result, cmd = m.Result.Update(msg)
 				cmds = append(cmds, cmd)
-
 			}
 		}
 
 	case tea.WindowSizeMsg:
 		m.Dimension.width = msg.Width
 		m.Dimension.height = msg.Height
-		headerHeight := int(math.Floor(topPanHSize * float64(m.Dimension.height)))
-		viewportHeight := m.Dimension.height - headerHeight - spacer - 10
 
+		// Fixed height calculations
+		topInputHeight := 3                                             // Fixed height for method/URL row
+		headerHeight := int(math.Max(float64(m.Dimension.height)/5, 6)) // Min height of 6, max 20% of screen
+		statusHeight := 1
+		spacerHeight := spacer * 3
+		resultHeight := m.Dimension.height - topInputHeight - headerHeight - statusHeight - spacerHeight - 4 // Account for borders
+
+		// Update components with new dimensions
+		m.HeaderInput.SetHeight(headerHeight - 2) // Account for borders
 		if !m.Ready {
 			m.Result = viewport.New(
 				int(math.Floor(wSize*float64(m.Dimension.width))),
-				viewportHeight,
+				resultHeight,
 			)
 			m.Ready = true
 		} else {
-			// Subsequent resize
 			m.Result.Width = int(math.Floor(wSize * float64(m.Dimension.width)))
-			m.Result.Height = viewportHeight
+			m.Result.Height = resultHeight
 		}
 	}
 
@@ -189,10 +234,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) View() string {
 	modeColor := map[Mode]string{
-		NormalMode: "212",
-		EditMode:   "114",
+		NormalMode: "69",
+		EditMode:   "156",
 	}
 
+	focusColor := "39"
+	borderColor := "244"
+
+	// Status bar
 	statusBar := lipgloss.NewStyle().
 		Background(lipgloss.Color(modeColor[m.Mode])).
 		Foreground(lipgloss.Color("0")).
@@ -201,64 +250,89 @@ func (m Model) View() string {
 		Render(fmt.Sprintf(" %s MODE | Focus: %s ",
 			m.Mode,
 			map[int]string{
-				0: "INPUT",
-				1: "RESULT",
+				0: "METHOD",
+				1: "URL",
+				2: "HEADERS",
+				3: "RESULT",
 			}[m.Focus]))
 
-	// Input section with hint text
-	inputHint := ""
-	if m.Mode == NormalMode {
-		inputHint = "\n[i: edit mode, j/k: navigation]"
-	} else {
-		inputHint = "\n[esc: normal mode]"
-	}
+	// Calculate widths
+	topWidth := int(math.Floor(wSize * float64(m.Dimension.width)))
+	methodBoxWidth := int(math.Floor(methodWidth * float64(topWidth)))
+	urlBoxWidth := int(math.Floor(urlWidth * float64(topWidth)))
 
-	topContent := m.TextInput.View() + inputHint
-
-	// Style the panes based on focus and mode
-	topPane := lipgloss.NewStyle().
+	// Method input box with fixed height
+	methodStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		Padding(1, 2).
-		Foreground(lipgloss.Color("104")).
-		Width(int(math.Floor(wSize * float64(m.Dimension.width)))).
-		Height(int(math.Floor(topPanHSize * float64(m.Dimension.height)))).
-		Render(topContent)
+		BorderForeground(lipgloss.Color(borderColor)).
+		Padding(0, 1).
+		Height(3).
+		Width(methodBoxWidth)
 
 	if m.Focus == 0 {
-		topPane = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(lipgloss.Color("205")).
-			Padding(1, 2).
-			Foreground(lipgloss.Color("205")).
-			Width(int(math.Floor(wSize * float64(m.Dimension.width)))).
-			Height(int(math.Floor(topPanHSize * float64(m.Dimension.height)))).
-			Render(topContent)
+		methodStyle = methodStyle.BorderForeground(lipgloss.Color(focusColor))
+	}
+	methodBox := methodStyle.Render(m.MethodInput.View())
+
+	// URL input box with fixed height
+	urlStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(lipgloss.Color(borderColor)).
+		Padding(0, 1).
+		Height(3).
+		Width(urlBoxWidth)
+
+	if m.Focus == 1 {
+		urlStyle = urlStyle.BorderForeground(lipgloss.Color(focusColor))
+	}
+	urlBox := urlStyle.Render(m.URLInput.View())
+
+	// Set textarea width
+	m.HeaderInput.SetWidth(topWidth - 4) // Account for borders and padding
+
+	// Headers section
+	headerBox := m.HeaderInput.View()
+	if m.Focus == 2 {
+		m.HeaderInput.Focus()
+	} else {
+		m.HeaderInput.Blur()
 	}
 
+	// Result viewport
 	viewportStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
-		BorderForeground(lipgloss.Color("63")).
-		Width(int(math.Floor(wSize * float64(m.Dimension.width))))
+		BorderForeground(lipgloss.Color(borderColor)).
+		Width(topWidth)
 
-	if m.Focus == 1 {
-		viewportStyle = viewportStyle.BorderForeground(lipgloss.Color("205"))
+	if m.Focus == 3 {
+		viewportStyle = viewportStyle.BorderForeground(lipgloss.Color(focusColor))
 	}
 
-	scrollHint := ""
-	if m.Focus == 1 {
-		if m.Mode == NormalMode {
-			scrollHint = "\n[h/l: scroll, ctrl+f/ctrl+b: page up/down]"
-		} else {
-			scrollHint = "\n[↑/↓: scroll, PgUp/PgDn: page up/down]"
-		}
+	// Navigation hints
+	hint := ""
+	if m.Mode == NormalMode {
+		hint = "\n[i: edit mode, j/k: navigation]"
+	} else {
+		hint = "\n[esc: normal mode, enter: make request]"
 	}
 
-	viewportContent := viewportStyle.Render(m.Result.View() + scrollHint)
+	viewportContent := viewportStyle.Render(m.Result.View() + hint)
 
+	// Top row with fixed height
+	topRow := lipgloss.JoinHorizontal(
+		lipgloss.Left,
+		methodBox,
+		strings.Repeat(" ", 2),
+		urlBox,
+	)
+
+	// Final layout
 	return lipgloss.JoinVertical(
 		lipgloss.Top,
 		statusBar,
-		topPane,
+		topRow,
+		strings.Repeat(" ", spacer),
+		headerBox,
 		strings.Repeat(" ", spacer),
 		viewportContent,
 	)
