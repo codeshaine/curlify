@@ -10,6 +10,7 @@ To contribute to Curlify, ensure the following tools are installed on your syste
 
 - **Go**: Ensure that Go (1.19 or newer) is installed. You can download it [here](https://golang.org/dl/).
 - **Git**: For version control to clone the repository and manage your contributions.
+- **Bubble Tea**: Since I'm using bubble tea framework for developing this application, having good understanding of bubble tea will be a necessary
 - **Make**: (Optional) For running build/test commands easily.
 
 ### Setting Up the Project

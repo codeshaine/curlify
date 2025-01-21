@@ -1,3 +1,48 @@
-# curlify
+# Curlify
 
-processing
+Curlify is a terminal-based API testing tool, designed to make it easier to test APIs with a clear and efficient terminal interface. It supports multiple panes for real-time input, HTTP methods, query/body parameters, and output display.
+
+**Note:** Curlify is currently in beta and under active development. We are looking for open-source contributions to make it even better!
+
+---
+
+## Installation
+
+You can install Curlify directly from the source using the `go install` command. Follow these steps:
+
+### Prerequisites
+
+- Ensure you have [Go](https://golang.org/doc/install) installed (version 1.18 or later).
+
+### Steps to Install
+
+1. Open your terminal.
+2. Run the following command to install Curlify:
+
+   ```bash
+   go install github.com/codeshaine/curlify@latest
+   ```
+
+3. After installation, ensure your `$GOPATH/bin` or `$HOME/go/bin` is in your `PATH` environment variable.
+
+---
+
+## Usage
+
+Once installed, you can use Curlify to test your APIs directly from the terminal:
+
+```bash
+curlify
+```
+
+Follow the on-screen instructions to interact with the tool.
+
+---
+
+## License
+
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
+
+---
+
+If you encounter any issues or have feature requests, feel free to open an issue in the repository!
