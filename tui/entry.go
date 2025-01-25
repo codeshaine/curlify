@@ -1,126 +1,18 @@
 package tui
 
 import (
-	"bufio"
 	"fmt"
 	"math"
 	"strings"
 
-	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/codeshaine/curlify/utils/request"
-	"github.com/codeshaine/curlify/utils/response"
 )
-
-const (
-	spacer      = 1
-	wSize       = 0.95
-	methodWidth = 0.17
-	urlWidth    = 0.83
-)
-
-type Mode string
-
-const (
-	NormalMode = "NORMAL"
-	EditMode   = "EDIT"
-)
-
-type Dim struct {
-	width  int
-	height int
-}
-
-type Model struct {
-	Focus           int
-	message         string //haven't decided what to do with this
-	MethodInput     textinput.Model
-	URLInput        textinput.Model
-	HeaderBodyInput textarea.Model
-	Result          viewport.Model
-	Ready           bool //for viewport
-	Dimension       Dim
-	Mode            Mode
-	RequestType     string
-	HeaderValues    string
-	IsHeader        bool
-	BodyValues      string
-}
-
-func NewModel() Model {
-	mi := textinput.New()
-	mi.Placeholder = "GET"
-	mi.SetValue("GET")
-	mi.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
-	mi.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
-	mi.Width = 6
-
-	ui := textinput.New()
-	ui.Placeholder = "Enter URL..."
-	ui.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
-	ui.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
-
-	// mi.Width = 44
-
-	hi := textarea.New()
-	hi.Placeholder = "Enter headers (key: value)..."
-	hi.ShowLineNumbers = true
-	hi.Prompt = ""
-	hi.FocusedStyle.Base = lipgloss.NewStyle().
-		BorderForeground(lipgloss.Color("39")).
-		Border(lipgloss.RoundedBorder())
-	hi.BlurredStyle.Base = lipgloss.NewStyle().
-		BorderForeground(lipgloss.Color("244")).
-		Border(lipgloss.RoundedBorder())
-
-	vp := viewport.New(0, 0)
-	vp.SetContent("")
-
-	return Model{
-		Focus:           0,
-		message:         "",
-		Ready:           false,
-		MethodInput:     mi,
-		URLInput:        ui,
-		HeaderBodyInput: hi,
-		Result:          vp,
-		Mode:            NormalMode,
-		RequestType:     "GET",
-		HeaderValues:    "headeqr",
-		BodyValues:      "body1",
-		IsHeader:        false,
-		Dimension:       Dim{height: 0, width: 0},
-	}
-}
 
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(tea.EnterAltScreen, textinput.Blink)
-}
-
-func makeRequest(m *Model) error {
-	header := request.ParseHeaders(m.HeaderBodyInput.Value())
-	req := request.NewGet(m.URLInput.Value(), header)
-
-	res, err := req.Do()
-	if err != nil {
-		temp := "Invalid URL"
-		m.Result.SetContent(temp)
-		return err
-	}
-
-	defer res.Body.Close()
-	var output strings.Builder
-	data := bufio.NewScanner(res.Body)
-	for data.Scan() {
-		output.WriteString(data.Text() + "\n")
-	}
-	temp := response.FormatJSONResponse(output.String())
-	m.Result.SetContent(temp)
-	m.Result.GotoTop()
-	return nil
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -176,8 +68,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case "g": //change it to shift+enter (well shift+enter is not the right word guess : HELP NEEDED)
 			if m.URLInput.Value() != "" && m.Mode == NormalMode {
-				// m.Result.SetContent("do")
-				makeRequest(&m)
+				m.makeRequest()
 
 			}
 
@@ -224,10 +115,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						cmds = append(cmds, textAreaCmd)
 					}
 					cmds = append(cmds, cmd)
-					// if m.IsHeader {
-					// 	m.HeaderValues = m.HeaderBodyInput.Value()
-					// }
-					// m.BodyValues = m.HeaderBodyInput.Value()
 				}
 			} else {
 				m.Result, cmd = m.Result.Update(msg)

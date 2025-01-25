@@ -16,11 +16,11 @@ type Post struct {
 func (p *Post) Do() (*http.Response, error) {
 	parsedUrl, err := url.Parse(p.Url)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	req := &http.Request{
-		Method: "POST",
+		Method: http.MethodPost,
 		URL:    parsedUrl,
 		Header: p.Header,
 		Body:   p.Body,
