@@ -1,3 +1,4 @@
 *.ignore.go
 /dist
 /bin
+.vscode
