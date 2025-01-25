@@ -17,8 +17,7 @@ func (m *Model) makeRequest() {
 		return
 	}
 
-	//**********************GET*********************************
-	if strings.EqualFold(m.MethodInput.Value(), "POST") {
+	if strings.EqualFold(m.MethodInput.Value(), "GET") {
 		header, err := request.ParseHeaders(m.HeaderValues)
 		if err != nil {
 			m.Result.SetContent(err.Error())

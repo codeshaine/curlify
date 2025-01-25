@@ -34,31 +34,26 @@ func NewModel() Model {
 	mi := textinput.New()
 	mi.Placeholder = "GET"
 	mi.SetValue("GET")
-	mi.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
-	mi.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
+	mi.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(textColor))
 	mi.Width = 6
 
 	ui := textinput.New()
-	ui.Placeholder = "Enter URL..."
-	ui.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
-	ui.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
-
-	// mi.Width = 44
+	ui.Placeholder = "https://example.com"
+	ui.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color(textColor))
 
 	hi := textarea.New()
-	hi.Placeholder = "Enter headers (key: value)..."
+	hi.Placeholder = `{"key":"value"} or Content-Type: application/json`
 	hi.ShowLineNumbers = true
 	hi.Prompt = ""
 	hi.FocusedStyle.Base = lipgloss.NewStyle().
-		BorderForeground(lipgloss.Color("39")).
-		Border(lipgloss.RoundedBorder())
+		BorderForeground(lipgloss.Color(focusColor)).
+		Border(lipgloss.RoundedBorder()).Foreground(lipgloss.Color(textColor))
 	hi.BlurredStyle.Base = lipgloss.NewStyle().
-		BorderForeground(lipgloss.Color("244")).
+		BorderForeground(lipgloss.Color(borderColor)).
 		Border(lipgloss.RoundedBorder())
 
 	vp := viewport.New(0, 0)
 	vp.SetContent("")
-
 	return Model{
 		Focus:           0,
 		message:         "",

@@ -3,7 +3,6 @@ package tui
 import (
 	"fmt"
 	"math"
-	"strings"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
@@ -126,15 +125,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Dimension.width = msg.Width
 		m.Dimension.height = msg.Height
 
-		// Fixed height calculations
-		topInputHeight := 3                                             // Fixed height for method/URL row
-		headerHeight := int(math.Max(float64(m.Dimension.height)/5, 6)) // Min height of 6, max 20% of screen
+		topInputHeight := 3
+		headerHeight := int(math.Max(float64(m.Dimension.height)/5, 6))
 		statusHeight := 1
 		spacerHeight := spacer * 3
-		resultHeight := m.Dimension.height - topInputHeight - headerHeight - statusHeight - spacerHeight - 4 // Account for borders
+		resultHeight := m.Dimension.height - topInputHeight - headerHeight - statusHeight - spacerHeight - 4
 
-		// Update components with new dimensions
-		m.HeaderBodyInput.SetHeight(headerHeight - 2) // Account for borders
+		m.HeaderBodyInput.SetHeight(headerHeight)
 		if !m.Ready {
 			m.Result = viewport.New(
 				int(math.Floor(wSize*float64(m.Dimension.width))),
@@ -152,14 +149,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) View() string {
 	modeColor := map[Mode]string{
-		NormalMode: "69",
-		EditMode:   "156",
+		NormalMode: "#bd93f9",
+		EditMode:   "#50fa7b",
 	}
 
-	focusColor := "39"
-	borderColor := "244"
-
-	// Status bar
 	DataSection := map[int]string{
 		0: "METHOD",
 		1: "URL",
@@ -178,12 +171,10 @@ func (m Model) View() string {
 			m.Mode,
 			DataSection))
 
-	// Calculate widths
 	topWidth := int(math.Floor(wSize * float64(m.Dimension.width)))
 	methodBoxWidth := int(math.Floor(methodWidth * float64(topWidth)))
 	urlBoxWidth := int(math.Floor(urlWidth * float64(topWidth)))
 
-	// Method input box with fixed height
 	methodStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color(borderColor)).
@@ -195,7 +186,6 @@ func (m Model) View() string {
 		methodStyle = methodStyle.BorderForeground(lipgloss.Color(focusColor))
 	}
 
-	// URL input box with fixed height
 	urlStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color(borderColor)).
@@ -207,17 +197,14 @@ func (m Model) View() string {
 		urlStyle = urlStyle.BorderForeground(lipgloss.Color(focusColor))
 	}
 
-	// Set textarea width
-	m.HeaderBodyInput.SetWidth(topWidth) // Account for borders and padding
+	m.HeaderBodyInput.SetWidth(topWidth)
 
-	// Headers section
 	if m.Focus == 2 {
 		m.HeaderBodyInput.Focus()
 	} else {
 		m.HeaderBodyInput.Blur()
 	}
 
-	// Result viewport
 	viewportStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color(borderColor)).
@@ -229,9 +216,9 @@ func (m Model) View() string {
 
 	hint := ""
 	if m.Mode == NormalMode {
-		hint = "\n[i: edit mode, j/k: navigation]"
+		hint = "\n[i: edit mode h: header, j/k: navigation]"
 	} else {
-		hint = "\n[esc: normal mode, shift+enter: make request]"
+		hint = "\n[esc: normal mode, g: make request]"
 	}
 
 	methodBox := methodStyle.Render(m.MethodInput.View())
@@ -242,7 +229,6 @@ func (m Model) View() string {
 	topRow := lipgloss.JoinHorizontal(
 		lipgloss.Left,
 		methodBox,
-		// strings.Repeat(" "),
 		urlBox,
 	)
 
@@ -250,9 +236,7 @@ func (m Model) View() string {
 		lipgloss.Top,
 		statusBar,
 		topRow,
-		strings.Repeat(" ", spacer), //disable this
 		headerBox,
-		strings.Repeat(" ", spacer), //disable this
 		viewportContent,
 	)
 }

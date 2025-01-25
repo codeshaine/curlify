@@ -11,3 +11,9 @@ const (
 	NormalMode = "NORMAL"
 	EditMode   = "EDIT"
 )
+
+const (
+	textColor   = "255"
+	focusColor  = "#bd93f9"
+	borderColor = "244"
+)
