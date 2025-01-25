@@ -1,123 +1,17 @@
 package tui
 
 import (
-	"bufio"
 	"fmt"
 	"math"
-	"strings"
 
-	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/codeshaine/curlify/utils/request"
-	"github.com/codeshaine/curlify/utils/response"
 )
-
-const (
-	spacer      = 1
-	wSize       = 0.92
-	methodWidth = 0.15
-	urlWidth    = 0.83
-)
-
-type Mode string
-
-const (
-	NormalMode = "NORMAL"
-	EditMode   = "EDIT"
-)
-
-type Dim struct {
-	width  int
-	height int
-}
-
-type Model struct {
-	Focus        int
-	message      string
-	Input        string
-	MethodInput  textinput.Model
-	URLInput     textinput.Model
-	HeaderInput  textarea.Model
-	Output       string
-	Result       viewport.Model
-	Ready        bool
-	Dimension    Dim
-	Mode         Mode
-	RequestType  string
-	HeaderValues map[string][]string
-}
-
-func NewModel() Model {
-	mi := textinput.New()
-	mi.Placeholder = "GET"
-	mi.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
-	mi.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
-	mi.Width = 10
-
-	ui := textinput.New()
-	ui.Placeholder = "Enter URL..."
-	ui.PromptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
-	ui.TextStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("39"))
-
-	hi := textarea.New()
-	hi.Placeholder = "Enter headers (key: value)..."
-	hi.ShowLineNumbers = false
-	hi.Prompt = ""
-	hi.FocusedStyle.Base = lipgloss.NewStyle().
-		BorderForeground(lipgloss.Color("39")).
-		Border(lipgloss.RoundedBorder())
-	hi.BlurredStyle.Base = lipgloss.NewStyle().
-		BorderForeground(lipgloss.Color("244")).
-		Border(lipgloss.RoundedBorder())
-
-	vp := viewport.New(0, 0)
-	vp.SetContent("")
-
-	return Model{
-		Focus:        0,
-		message:      "",
-		Input:        "",
-		Output:       "",
-		Ready:        false,
-		MethodInput:  mi,
-		URLInput:     ui,
-		HeaderInput:  hi,
-		Result:       vp,
-		Mode:         NormalMode,
-		RequestType:  "GET",
-		HeaderValues: make(map[string][]string),
-		Dimension:    Dim{height: 0, width: 0},
-	}
-}
 
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(tea.EnterAltScreen, textinput.Blink)
-}
-
-func makeRequest(m *Model) error {
-	header := request.ParseHeaders(m.HeaderInput.Value())
-	req := request.NewGet(m.URLInput.Value(), header)
-
-	res, err := req.Do()
-	if err != nil {
-		m.Output = "Invalid URL"
-		m.Result.SetContent(m.Output)
-		return err
-	}
-
-	defer res.Body.Close()
-	var output strings.Builder
-	data := bufio.NewScanner(res.Body)
-	for data.Scan() {
-		output.WriteString(data.Text() + "\n")
-	}
-	m.Output = response.FormatJSONResponse(output.String())
-	m.Result.SetContent(m.Output)
-	m.Result.GotoTop()
-	return nil
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -131,10 +25,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch msg.String() {
 		case "esc":
 			if m.Mode == EditMode {
+				if m.IsHeader {
+					m.HeaderValues = m.HeaderBodyInput.Value()
+				} else {
+					m.BodyValues = m.HeaderBodyInput.Value()
+				}
 				m.Mode = NormalMode
+				m.IsHeader = false //exiting the header
 				m.MethodInput.Blur()
 				m.URLInput.Blur()
-				m.HeaderInput.Blur()
+				m.HeaderBodyInput.SetValue(m.BodyValues)
+				m.HeaderBodyInput.Blur()
 				return m, nil
 			}
 		case "i":
@@ -146,10 +47,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				case 1:
 					m.URLInput.Focus()
 				case 2:
-					m.HeaderInput.Focus()
+					m.HeaderBodyInput.Focus()
+					m.HeaderBodyInput.SetValue(m.BodyValues)
+
 				}
 				return m, nil
 			}
+		case "h": //for header section
+			if m.Mode == NormalMode {
+				switch m.Focus {
+				case 2:
+					// m.HeaderBodyInput.SetValue(m.BodyValues)
+					m.IsHeader = true
+					m.HeaderBodyInput.Focus()
+					m.HeaderBodyInput.SetValue(m.HeaderValues)
+					m.Mode = EditMode
+				}
+				return m, nil
+			}
+		case "g": //change it to shift+enter (well shift+enter is not the right word guess : HELP NEEDED)
+			if m.URLInput.Value() != "" && m.Mode == NormalMode {
+				m.makeRequest()
+
+			}
+
 		}
 
 		if m.Mode == NormalMode {
@@ -159,7 +80,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.Focus++
 					m.MethodInput.Blur()
 					m.URLInput.Blur()
-					m.HeaderInput.Blur()
+					m.HeaderBodyInput.Blur()
 				}
 			case "k":
 				if m.Focus > 0 {
@@ -171,7 +92,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						case 1:
 							m.URLInput.Focus()
 						case 2:
-							m.HeaderInput.Focus()
+							m.HeaderBodyInput.Focus()
 						}
 					}
 				}
@@ -181,10 +102,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			if m.Focus != 3 {
 				switch msg.String() {
-				case "enter":
-					if m.Focus != 2 && m.URLInput.Value() != "" {
-						makeRequest(&m)
-					}
 				default:
 					switch m.Focus {
 					case 0:
@@ -193,7 +110,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.URLInput, cmd = m.URLInput.Update(msg)
 					case 2:
 						var textAreaCmd tea.Cmd
-						m.HeaderInput, textAreaCmd = m.HeaderInput.Update(msg)
+						m.HeaderBodyInput, textAreaCmd = m.HeaderBodyInput.Update(msg)
 						cmds = append(cmds, textAreaCmd)
 					}
 					cmds = append(cmds, cmd)
@@ -208,15 +125,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Dimension.width = msg.Width
 		m.Dimension.height = msg.Height
 
-		// Fixed height calculations
-		topInputHeight := 3                                             // Fixed height for method/URL row
-		headerHeight := int(math.Max(float64(m.Dimension.height)/5, 6)) // Min height of 6, max 20% of screen
+		topInputHeight := 3
+		headerHeight := int(math.Max(float64(m.Dimension.height)/5, 6))
 		statusHeight := 1
 		spacerHeight := spacer * 3
-		resultHeight := m.Dimension.height - topInputHeight - headerHeight - statusHeight - spacerHeight - 4 // Account for borders
+		resultHeight := m.Dimension.height - topInputHeight - headerHeight - statusHeight - spacerHeight - 4
 
-		// Update components with new dimensions
-		m.HeaderInput.SetHeight(headerHeight - 2) // Account for borders
+		m.HeaderBodyInput.SetHeight(headerHeight)
 		if !m.Ready {
 			m.Result = viewport.New(
 				int(math.Floor(wSize*float64(m.Dimension.width))),
@@ -234,14 +149,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m Model) View() string {
 	modeColor := map[Mode]string{
-		NormalMode: "69",
-		EditMode:   "156",
+		NormalMode: "#bd93f9",
+		EditMode:   "#50fa7b",
 	}
 
-	focusColor := "39"
-	borderColor := "244"
-
-	// Status bar
+	DataSection := map[int]string{
+		0: "METHOD",
+		1: "URL",
+		2: "BODY",
+		3: "RESULT",
+	}[m.Focus]
+	if m.IsHeader {
+		DataSection = "HEADER"
+	}
 	statusBar := lipgloss.NewStyle().
 		Background(lipgloss.Color(modeColor[m.Mode])).
 		Foreground(lipgloss.Color("0")).
@@ -249,56 +169,42 @@ func (m Model) View() string {
 		Padding(0, 1).
 		Render(fmt.Sprintf(" %s MODE | Focus: %s ",
 			m.Mode,
-			map[int]string{
-				0: "METHOD",
-				1: "URL",
-				2: "HEADERS",
-				3: "RESULT",
-			}[m.Focus]))
+			DataSection))
 
-	// Calculate widths
 	topWidth := int(math.Floor(wSize * float64(m.Dimension.width)))
 	methodBoxWidth := int(math.Floor(methodWidth * float64(topWidth)))
 	urlBoxWidth := int(math.Floor(urlWidth * float64(topWidth)))
 
-	// Method input box with fixed height
 	methodStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color(borderColor)).
-		Padding(0, 1).
-		Height(3).
+		Padding(1, 1).
+		Height(1).
 		Width(methodBoxWidth)
 
 	if m.Focus == 0 {
 		methodStyle = methodStyle.BorderForeground(lipgloss.Color(focusColor))
 	}
-	methodBox := methodStyle.Render(m.MethodInput.View())
 
-	// URL input box with fixed height
 	urlStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color(borderColor)).
-		Padding(0, 1).
-		Height(3).
+		Padding(1, 1).
+		Height(1).
 		Width(urlBoxWidth)
 
 	if m.Focus == 1 {
 		urlStyle = urlStyle.BorderForeground(lipgloss.Color(focusColor))
 	}
-	urlBox := urlStyle.Render(m.URLInput.View())
 
-	// Set textarea width
-	m.HeaderInput.SetWidth(topWidth - 4) // Account for borders and padding
+	m.HeaderBodyInput.SetWidth(topWidth)
 
-	// Headers section
-	headerBox := m.HeaderInput.View()
 	if m.Focus == 2 {
-		m.HeaderInput.Focus()
+		m.HeaderBodyInput.Focus()
 	} else {
-		m.HeaderInput.Blur()
+		m.HeaderBodyInput.Blur()
 	}
 
-	// Result viewport
 	viewportStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		BorderForeground(lipgloss.Color(borderColor)).
@@ -308,32 +214,29 @@ func (m Model) View() string {
 		viewportStyle = viewportStyle.BorderForeground(lipgloss.Color(focusColor))
 	}
 
-	// Navigation hints
 	hint := ""
 	if m.Mode == NormalMode {
-		hint = "\n[i: edit mode, j/k: navigation]"
+		hint = "\n[i: edit mode h: header, j/k: navigation]"
 	} else {
-		hint = "\n[esc: normal mode, enter: make request]"
+		hint = "\n[esc: normal mode, g: make request]"
 	}
 
+	methodBox := methodStyle.Render(m.MethodInput.View())
+	urlBox := urlStyle.Render(m.URLInput.View())
+	headerBox := m.HeaderBodyInput.View()
 	viewportContent := viewportStyle.Render(m.Result.View() + hint)
 
-	// Top row with fixed height
 	topRow := lipgloss.JoinHorizontal(
 		lipgloss.Left,
 		methodBox,
-		strings.Repeat(" ", 2),
 		urlBox,
 	)
 
-	// Final layout
 	return lipgloss.JoinVertical(
 		lipgloss.Top,
 		statusBar,
 		topRow,
-		strings.Repeat(" ", spacer),
 		headerBox,
-		strings.Repeat(" ", spacer),
 		viewportContent,
 	)
 }

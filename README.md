@@ -37,6 +37,15 @@ curlify
 
 Follow the on-screen instructions to interact with the tool.
 
+### Keybindings
+
+- `i`: Enter edit mode to modify the method, URL, or body.
+- `h`: Focus on the header section in normal mode (it will go to edit mode in body section for writing headers).
+- `esc`: Exit edit mode and return to normal mode.
+- `j/k`: Navigate between method, URL, body, and result sections in normal mode.
+- `g`: Make a request (when URL is provided) in normal mode.
+- `q`: Quit the application.
+
 ---
 
 ## License
