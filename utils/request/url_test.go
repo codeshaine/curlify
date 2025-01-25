@@ -11,7 +11,7 @@ func TestValidateUrl(t *testing.T) {
 		err      string
 	}{
 		{"", "", "empty URL"},
-		{"example.com", "", "missing scheme"},
+		{"example.com", "", "invalid url"},
 		{"ftp://example.com", "", "only http and https allowed"},
 		{"http://", "", "missing host"},
 		{"http://example.com", "http://example.com", ""},
