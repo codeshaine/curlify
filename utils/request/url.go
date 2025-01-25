@@ -13,7 +13,7 @@ func ValidateUrl(input string) (string, error) {
 	// Check for scheme
 	schemeParts := strings.SplitN(input, "://", 2)
 	if len(schemeParts) != 2 {
-		return "", fmt.Errorf("invalid URL")
+		return "", fmt.Errorf("invalid url")
 	}
 
 	// Validate scheme
