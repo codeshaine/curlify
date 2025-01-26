@@ -1,5 +1,8 @@
-# Curlify
+<h1 style="text-align:center">Curlify</h1>
 
+<p>
+<img src="demo.gif" />
+</p>
 Curlify is a terminal-based API testing tool, designed to make it easier to test APIs with a clear and efficient terminal interface. It supports multiple panes for real-time input, HTTP methods, query/body parameters, and output display.
 
 **Note:** Curlify is currently in beta and under active development. We are looking for open-source contributions to make it even better!
