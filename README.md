@@ -1,5 +1,8 @@
 <h1 style="text-align:center">Curlify</h1>
 
+<p>NOTE: I think TUI for api testing is not good solution. I thought I would use it heavily but I just went to curl for quick testing anyway. I have better plan for this, the one that I would use. I will try to build that when I have time.</p>
+
+
 <p>
 <img src="demo.gif" />
 </p>
@@ -55,6 +58,5 @@ Follow the on-screen instructions to interact with the tool.
 
 This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for more details.
 
----
 
-If you encounter any issues or have feature requests, feel free to open an issue in the repository!
+
